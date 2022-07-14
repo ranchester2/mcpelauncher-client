@@ -155,6 +155,10 @@ int main(int argc, char *argv[]) {
     FakeWindow::initHybrisHooks(android_syms);
     for (auto s = android_symbols; *s; s++) // stub missing symbols
         android_syms.insert({*s, (void *) +[]() { Log::warn("Main", "Android stub called"); }});
+    android_syms["mallinfo"] = (void*)+[](void*) -> ___data {
+         return { .ordblks = 8000000, .usmblks= 8000000, .fordblks= 8000000 };
+     };
+
     linker::load_library("libandroid.so", android_syms);
     ModLoader modLoader;
     modLoader.loadModsFromDirectory(PathHelper::getPrimaryDataDirectory() + "mods/", true);
