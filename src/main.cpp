@@ -41,6 +41,19 @@ LauncherOptions options;
 
 void printVersionInfo();
 
+template<const char**names,class> class SmartStub;
+template<const char**names, size_t...I> class SmartStub<names, std::integer_sequence<size_t, I...>> {
+public:
+    template<size_t i> static int Add(std::unordered_map<std::string, void *>& android_syms) {
+        android_syms.insert({names[i], (void *) +[]() { Log::warn("Main", "Android stub called %s", names[i]); }});
+        return 0;
+    }
+    static void AddAll(std::unordered_map<std::string, void *>& android_syms) {
+        int a[] = { Add<I>(android_syms)... };
+    }
+};
+
+
 int main(int argc, char *argv[]) {
     auto windowManager = GameWindowManager::getManager();
     CrashHandler::registerCrashHandler();
@@ -153,12 +166,46 @@ int main(int argc, char *argv[]) {
     FakeInputQueue::initHybrisHooks(android_syms);
     FakeLooper::initHybrisHooks(android_syms);
     FakeWindow::initHybrisHooks(android_syms);
-    for (auto s = android_symbols; *s; s++) // stub missing symbols
-        android_syms.insert({*s, (void *) +[]() { Log::warn("Main", "Android stub called"); }});
-    android_syms["mallinfo"] = (void*)+[](void*) -> ___data {
-         return { .ordblks = 8000000, .usmblks= 8000000, .fordblks= 8000000 };
-     };
 
+    struct ___data {
+          size_t arena; \
+            /** Number of free chunks. */ \
+            size_t ordblks; \
+            /** (Unused.) */ \
+            size_t smblks; \
+            /** (Unused.) */ \
+            size_t hblks; \
+            /** Total number of bytes in mmapped regions. */ \
+            size_t hblkhd; \
+            /** Maximum total allocated space; greater than total if trimming has occurred. */ \
+            size_t usmblks; \
+            /** (Unused.) */ \
+            size_t fsmblks; \
+            /** Total allocated space (normal or mmapped.) */ \
+            size_t uordblks; \
+            /** Total free space. */ \
+            size_t fordblks; \
+            /** Upper bound on number of bytes releasable by a trim operation. */ \
+            size_t keepcost;
+                };
+    android_syms["mallinfo"] = (void*)+[](void*) -> ___data {
+        return { .ordblks = 8000000, .usmblks= 8000000, .fordblks= 8000000 };
+    };
+
+    android_syms["ANativeWindow_getWidth"] = (void*)+[](void*) -> int32_t {
+        // int width, height;
+        // FakeLooper::associatedWindow->getWindowSize(width, height);
+        return 0;
+    };
+    android_syms["ANativeWindow_getHeight"] = (void*)+[](void*) -> int32_t {
+        // int width, height;
+        // FakeLooper::associatedWindow->getWindowSize(width, height);
+        return 0;
+    };
+    android_syms["ANativeWindow_setBuffersGeometry"] = (void*)+[](void*) -> void {
+        printf("===\n");
+    };
+    SmartStub<android_symbols, std::make_index_sequence<(sizeof(android_symbols) / sizeof(*android_symbols)) - 1>>::AddAll(android_syms);
     linker::load_library("libandroid.so", android_syms);
     ModLoader modLoader;
     modLoader.loadModsFromDirectory(PathHelper::getPrimaryDataDirectory() + "mods/", true);
